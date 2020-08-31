@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      .container {
+        position: relative;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        width: 100%;
+        height: 100vh;
+        background-color: beige;
+      }
+      .knob-container {
+        position: relative;
+      }
+      .knob-pointer-box {
+        position: absolute;
+        top: 0;
+        left: 0;
+        background-color: rgba(255, 235, 205, 0.158);
+        /* 旋转到起始点 */
+        transform: rotate(-135deg);
+      }
+      .knob-pointer {
+        box-sizing: border-box;
+        border-radius: 50%;
+        position: relative;
+        background-color: gainsboro;
+        margin: 0 auto;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="knob-container">
+        <canvas id="clock" width="800" height="800"></canvas>
+        <div id="knobPointer" class="knob-pointer-box">
+          <div id="pointer" class="knob-pointer"></div>
+        </div>
+      </div>
+    </div>
+    <script>
+      let canvas = document.getElementById("clock");
+      let knobPointer = document.getElementById("knobPointer");
+      let pointer = document.getElementById("pointer");
+      var knobValue = 0; // 当前的值
+
+      var currentColor = "";
+
+      function creatPoint(ctx) {
+        const OUTR = Math.min(ctx.canvas.width, ctx.canvas.height) / 2; // 外圈半径
+        const AxisLine = OUTR / 2;
+        const INNERR =
+          Math.min(ctx.canvas.width, ctx.canvas.height) / 2 - AxisLine; // 内圈半径
+        let angle = (Math.PI * 2) / 360; // 角度转弧度
+
+        // 修正象限正负
+        const RULES = [
+          [0, 90, [1, 1]],
+          [90, 180, [-1, 1]],
+          [180, 270, [-1, -1]],
+        ];
+        function matchGridRule(rules, target) {
+          let modifier;
+          for (let rule of rules) {
+            let [min, max, modifierArr] = rule;
+            if (target >= min && target < max) {
+              modifier = modifierArr;
+              break;
+            }
+          }
+          return modifier;
+        }
+        function translateAxis(arr = [], modifierArr = [1, 1]) {
+          // 根据传入的修正数组生成符合当前象限的指针坐标值
+          let pointAxis = arr.reduce((pre, cur, index) => {
+            return (newarr = [...pre, Math.abs(cur) * modifierArr[index]]);
+          }, []);
+          return pointAxis;
+        }
+        const angleArr = Array(100)
+          .fill(0)
+          .map((item, idx) => idx * 2.7); // 生成刻度线角度数组 101个元素
+        angleArr.push(270);
+
+        // 根据角度数组生成内外圈的坐标点
+        let points = angleArr.map((a) => {
+          let angleNow = a * angle;
+          let currentModifier = matchGridRule(RULES, a);
+          let innerPoint = translateAxis(
+            [Math.cos(angleNow) * INNERR, Math.sin(angleNow) * INNERR],
+            currentModifier
+          );
+          let outPoint = translateAxis(
+            [Math.cos(angleNow) * OUTR, Math.sin(angleNow) * OUTR],
+            currentModifier
+          );
+
+          if (a === 270) {
+            innerPoint = innerPoint.map((item) => item * -1);
+            outPoint = outPoint.map((item) => item * -1);
+          }
+
+          return { i: innerPoint, o: outPoint, angle: a };
+        });
+
+        return points;
+      }
+
+      const valueColor = [
+        [95, "#ff0000"],
+        [90, "#c02424"],
+        [80, "#cb4848"],
+        [70, "#ff8c00"],
+        [60, "#f49a2c"],
+        [50, "#cb9d25"],
+        [40, "#d6b359"],
+        [30, "#aab566"],
+        [20, "#9ab566"],
+        [10, "#19b620"],
+        [0, "#108315"],
+      ].reverse();
+      function angleToColor(angle) {
+        valueColor.reduce((pre, cur, idx) => {
+          if (!pre) return cur;
+          if (angle >= pre[0] && angle < cur[0]) {
+            currentColor = pre[1];
+          }
+          return cur;
+        }, null);
+      }
+
+      // 旋转 pointer事件
+      function rotatePointer(callback = null) {
+        const valueBit = 2; // 小数位数
+        const defaultRad = -2.356194490192345; // -135度
+        const defaultAngle = -135;
+        const defaultMaxAngle = -225;
+        let isMove = false;
+        let isMouseIn = false;
+        let preRealAngle = -135;
+        let currentRealAngle = -135;
+        let pointer = document.getElementById("pointer");
+        let knobPointer = document.getElementById("knobPointer");
+
+        // 鼠标按下
+        pointer.onmousedown = function (event) {
+          const rect = knobPointer.getBoundingClientRect();
+          knobPointer.dataset.centerX = rect.left + rect.width / 2;
+          knobPointer.dataset.centerY = rect.top + rect.height / 2;
+          knobPointer.dataset.angle = getDragAngle(event);
+          isMove = true;
+        };
+
+        // 鼠标移入
+        knobPointer.onmouseenter = function () {
+          isMouseIn = true;
+        };
+        // 鼠标移出
+        knobPointer.onmouseleave = function () {
+          isMouseIn = false;
+        };
+
+        // 鼠标移动
+        document.onmousemove = function () {
+          if (isMove && isMouseIn) {
+            let angle = getDragAngle(event);
+            let currentAngle = angle * (180 / Math.PI);
+            if (currentAngle > -180 && currentAngle < -135) {
+              currentAngle = defaultAngle;
+            } else if (currentAngle > -225 && currentAngle < -180) {
+              currentAngle = defaultMaxAngle;
+            }
+            // 根据前后角度变化计算值
+            currentRealAngle = Math.floor(currentAngle);
+            let incrementAngle;
+            if (currentRealAngle <= -225 && currentRealAngle >= -270) {
+              // 第四象限单独处理
+              incrementAngle = currentRealAngle + 270 + 225;
+            } else {
+              incrementAngle = currentRealAngle - preRealAngle;
+            }
+            let value = +((incrementAngle / 270) * 100).toFixed(valueBit); // 设置保留小数位数
+            knobValue = value;
+            callback && typeof callback === "function" && callback();
+            knobPointer.style.transform = "rotate(" + currentAngle + "deg)";
+          }
+        };
+
+        // 鼠标弹起
+        document.onmouseup = function () {
+          if (isMove && isMouseIn) {
+            isMove = false;
+            knobPointer.dataset.angle = getDragAngle(event);
+          }
+        };
+
+        function getDragAngle(event) {
+          var element = document.getElementById("knobPointer");
+          var startAngle;
+          if (isNaN(parseFloat(element.dataset.angle))) {
+            startAngle = defaultRad;
+          } else {
+            startAngle = parseFloat(element.dataset.angle);
+          }
+          var center = {
+            x: parseFloat(element.dataset.centerX) || 0,
+            y: parseFloat(element.dataset.centerY) || 0,
+          };
+          var angle = Math.atan2(
+            center.y - event.clientY,
+            center.x - event.clientX
+          );
+          // console.log((180 / Math.PI) * (angle - startAngle), "真实角度");
+          return angle - startAngle;
+        }
+      }
+
+      // dom 加载后绘制
+      onload = function () {
+        const ctx = canvas.getContext("2d");
+        const w = ctx.canvas.width / 2;
+        const h = ctx.canvas.height / 2;
+        const angle = (Math.PI * 2) / 360; // 角度转弧度
+        const LineWidth = 4; // 刻度线宽度
+        const OUTR = Math.min(ctx.canvas.width, ctx.canvas.height) / 2; // 外圈半径
+        const AxisLine = OUTR / 2;
+        const INNERR =
+          Math.min(ctx.canvas.width, ctx.canvas.height) / 2 - AxisLine; // 内圈半径
+        // 计算pointer box样式
+        knobPointer.style.width = `${ctx.canvas.width}px`;
+        knobPointer.style.height = `${ctx.canvas.height}px`;
+        // 计算pointer样式
+        pointer.style.width = `${w / 10}px`;
+        pointer.style.height = `${h / 10}px`;
+        pointer.style.marginTop = `${INNERR - h / 20}px`;
+
+        const DrawPoints = creatPoint(ctx);
+
+        function draw() {
+          ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+          ctx.save();
+
+          // 绘制knob外圈圆
+          ctx.beginPath();
+          ctx.fillStyle = "black";
+          ctx.arc(w, h, OUTR, 0, Math.PI * 2, false);
+          ctx.fill();
+          ctx.closePath();
+
+          // 绘制内圈圆
+          ctx.beginPath();
+          ctx.strokeStyle = "blue";
+          ctx.lineWidth = 1;
+          ctx.arc(w, h, INNERR, 0, Math.PI * 2, false);
+          ctx.stroke();
+          ctx.closePath();
+
+          // 绘制扇形边界参考线
+          ctx.beginPath();
+          ctx.strokeStyle = "black";
+          ctx.lineWidth = 1;
+          ctx.translate(w, h); // 移动中心点
+          ctx.rotate(angle * 45);
+          ctx.moveTo(0, 0);
+          ctx.lineTo(OUTR, 0);
+          ctx.moveTo(0, 0);
+          ctx.lineTo(0, OUTR);
+          ctx.stroke();
+          ctx.closePath();
+
+          // 开始绘制扇形值
+          ctx.beginPath();
+          ctx.strokeStyle = "#108315";
+          ctx.lineWidth = LineWidth;
+          ctx.rotate(angle * 90); // 旋转90度 调整坐标轴
+          DrawPoints.forEach((p, idx) => {
+            ctx.beginPath();
+            ctx.moveTo(...p.i);
+            ctx.lineTo(...p.o);
+            angleToColor((p.angle * 10) / 27);
+            // 根据当前值 【knobValue】判断后续刻度线是否显示
+            if ((p.angle * 10) / 27 > knobValue || knobValue === 0) {
+              currentColor = "black";
+            }
+            ctx.strokeStyle = currentColor;
+            ctx.stroke();
+            ctx.closePath();
+          });
+          ctx.closePath();
+
+          // 绘制数字
+          ctx.beginPath();
+          ctx.rotate(angle * -135); // 旋转回正常角度
+          ctx.moveTo(0, 0);
+          ctx.fillStyle = currentColor;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.font = `${w / 5}px blod Georgia`;
+          ctx.fillText(knobValue, 0, 0);
+          ctx.closePath();
+
+          ctx.restore();
+        }
+
+        draw(); // 第一次绘制
+        rotatePointer(draw);
+      };
+    </script>
+  </body>
+</html>
