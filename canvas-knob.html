@@ -57,6 +57,7 @@
       var knobValue = 0; // 当前的值
 
       var currentColor = "";
+      var currentTextColor = "gray"; // 当前字体颜色
 
       function creatPoint(ctx) {
         const OUTR = Math.min(ctx.canvas.width, ctx.canvas.height) / 2; // 外圈半径
@@ -282,7 +283,7 @@
 
           // 开始绘制扇形值
           ctx.beginPath();
-          ctx.strokeStyle = "#108315";
+          // ctx.strokeStyle = "#108315";
           ctx.lineWidth = LineWidth;
           ctx.rotate(angle * 90); // 旋转90度 调整坐标轴
           DrawPoints.forEach((p, idx) => {
@@ -294,6 +295,9 @@
             if ((p.angle * 10) / 27 > knobValue || knobValue === 0) {
               currentColor = "black";
             }
+            if (currentColor !== "black") {
+              currentTextColor = currentColor;
+            }
             ctx.strokeStyle = currentColor;
             ctx.stroke();
             ctx.closePath();
@@ -304,7 +308,7 @@
           ctx.beginPath();
           ctx.rotate(angle * -135); // 旋转回正常角度
           ctx.moveTo(0, 0);
-          ctx.fillStyle = currentColor;
+          ctx.fillStyle = currentTextColor;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           ctx.font = `${w / 5}px blod Georgia`;
